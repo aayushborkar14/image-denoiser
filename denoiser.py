@@ -5,7 +5,6 @@ import torch
 from PIL import Image
 import os
 from dncnn import denoise_image as denoise_image_dncnn, DnCNN
-from dncnn_rl import denoise_image as denoise_image_dncnn_rl, DnCNNRL
 from rednet import denoise_image as denoise_image_rednet, REDNet30
 from rednet_bam import (
     denoise_image as denoise_image_rednet_bam,
@@ -30,17 +29,6 @@ torch.classes.__path__ = []
 def load_dncnn():
     model = DnCNN()
     model.load_state_dict(torch.load("models/dncnn_epoch_100.pth", map_location=device))
-    model.eval()
-    model.to(device)
-    return model
-
-
-@st.cache_resource
-def load_dncnn_rl():
-    model = DnCNNRL()
-    model.load_state_dict(
-        torch.load("models/dncnn_epoch_100_rl.pth", map_location=device)
-    )
     model.eval()
     model.to(device)
     return model
@@ -96,15 +84,12 @@ st.sidebar.title("⚙️ Settings")
 # --- Model selection ---
 model_choice = st.sidebar.selectbox(
     "Choose a model:",
-    ["DnCNN", "DnCNN RL", "REDNet30", "REDNet30 CBAM", "REDNet30 CBAM2"],
+    ["DnCNN", "REDNet30", "REDNet30 CBAM", "REDNet30 CBAM2"],
 )
 
 if model_choice == "DnCNN":
     model = load_dncnn()
     denoise_func = denoise_image_dncnn
-elif model_choice == "DnCNN RL":
-    model = load_dncnn_rl()
-    denoise_func = denoise_image_dncnn_rl
 elif model_choice == "REDNet30":
     model = load_rednet()
     denoise_func = denoise_image_rednet
