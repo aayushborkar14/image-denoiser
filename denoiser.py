@@ -59,7 +59,7 @@ def load_rednet():
 def load_rednet_bam():
     model = REDNet30Bam()
     model.load_state_dict(
-        torch.load("models/rednet_cbam_epoch_70.pth", map_location=device)
+        torch.load("models/rednet_cbam_epoch_100.pth", map_location=device)
     )
     model.eval()
     model.to(device)
@@ -85,16 +85,20 @@ def crop_image_to_multiple_of(img, multiple):
 
 
 # --- App title ---
-st.title("Image Denoiser")
+st.title("🧼 Image Denoiser")
 st.write(
     "Choose a sample or upload a grayscale image to see the denoising effect of a trained model."
 )
 
+# --- Sidebar configuration ---
+st.sidebar.title("⚙️ Settings")
+
 # --- Model selection ---
-model_choice = st.selectbox(
+model_choice = st.sidebar.selectbox(
     "Choose a model:",
     ["DnCNN", "DnCNN RL", "REDNet30", "REDNet30 CBAM", "REDNet30 CBAM2"],
 )
+
 if model_choice == "DnCNN":
     model = load_dncnn()
     denoise_func = denoise_image_dncnn
@@ -112,8 +116,10 @@ elif model_choice == "REDNet30 CBAM2":
     denoise_func = denoise_image_rednet_bam2
 
 # --- Image selection ---
-st.subheader("Choose Image Source")
-image_source = st.radio("Select image input method:", ("Sample Image", "Upload Image"))
+st.sidebar.subheader("📷 Image Input")
+image_source = st.sidebar.radio(
+    "Select image input method:", ("Sample Image", "Upload Image")
+)
 
 if image_source == "Sample Image":
     sample_dir = "sample_images"
@@ -127,11 +133,13 @@ if image_source == "Sample Image":
     if not image_names:
         st.warning("No sample images found in the directory.")
         st.stop()
-    selected_image_name = st.selectbox("Choose a sample image:", image_names)
+    selected_image_name = st.sidebar.selectbox("Choose a sample image:", image_names)
     image_path = os.path.join(sample_dir, selected_image_name)
     image = Image.open(image_path)
 elif image_source == "Upload Image":
-    uploaded_file = st.file_uploader("Upload your image:", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload your image:", type=["jpg", "jpeg", "png"]
+    )
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
     else:
@@ -145,7 +153,7 @@ img = np.array(image)
 if "REDNet30" in model_choice:
     img = crop_image_to_multiple_of(img, 32)
 
-st.subheader("Original Image")
+st.subheader("🖼️ Original Image")
 st.image(img, use_container_width=True, caption="Grayscale input image")
 
 # --- Add Gaussian Noise ---
@@ -153,13 +161,13 @@ noise = np.random.randn(*img.shape) * sigma
 noisy_img = img + noise
 noisy_img = np.clip(noisy_img, 0, 255).astype("uint8")
 
-st.subheader("Noisy Image")
+st.subheader("🌩️ Noisy Image")
 st.image(noisy_img, use_container_width=True, caption="Image with Gaussian noise")
 
 # --- Denoise ---
 denoised_img = denoise_func(noisy_img, model)
 
-st.subheader("Denoised Image")
+st.subheader("🧽 Denoised Image")
 st.image(
     denoised_img,
     use_container_width=True,
@@ -168,14 +176,14 @@ st.image(
 
 # --- Side-by-side comparison ---
 comparison = np.hstack((img, noisy_img, denoised_img))
-st.subheader("Side-by-Side Comparison")
+st.subheader("🆚 Side-by-Side Comparison")
 st.image(comparison, caption="Original | Noisy | Denoised", use_container_width=True)
 
 # --- Metrics ---
-st.subheader(
-    f"PSNR: {peak_signal_noise_ratio(img, denoised_img, data_range=255.0):.2f}"
-)
-st.subheader(
-    f"SSIM: {structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1):.4f}"
-)
+psnr = peak_signal_noise_ratio(img, denoised_img, data_range=255.0)
+ssim = structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1)
+
+st.subheader("📈 Evaluation Metrics")
+st.markdown(f"- **PSNR**: `{psnr:.2f}` dB")
+st.markdown(f"- **SSIM**: `{ssim:.4f}`")
 
