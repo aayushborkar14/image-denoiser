@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import torch
 from PIL import Image
+import os
 from dncnn import denoise_image as denoise_image_dncnn, DnCNN
 from dncnn_rl import denoise_image as denoise_image_dncnn_rl, DnCNNRL
 from rednet import denoise_image as denoise_image_rednet, REDNet30
@@ -85,7 +86,9 @@ def crop_image_to_multiple_of(img, multiple):
 
 # --- App title ---
 st.title("Image Denoiser")
-st.write("Upload a grayscale image to see the denoising effect of a trained model.")
+st.write(
+    "Choose a sample or upload a grayscale image to see the denoising effect of a trained model."
+)
 
 # --- Model selection ---
 model_choice = st.selectbox(
@@ -108,50 +111,71 @@ elif model_choice == "REDNet30 CBAM2":
     model = load_rednet_bam2()
     denoise_func = denoise_image_rednet_bam2
 
-# --- File upload ---
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+# --- Image selection ---
+st.subheader("Choose Image Source")
+image_source = st.radio("Select image input method:", ("Sample Image", "Upload Image"))
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    if "REDNet30" not in model_choice:
-        image = image.convert("L")
-    img = np.array(image)
-    if "REDNet30" in model_choice:
-        img = crop_image_to_multiple_of(img, 32)
-
-    st.subheader("Original Image")
-    st.image(img, use_container_width=True, caption="Grayscale input image")
-
-    # Add Gaussian noise
-    noise = np.random.randn(*img.shape) * sigma
-    noisy_img = img + noise
-    # noisy_img = img
-    noisy_img = np.clip(noisy_img, 0, 255).astype("uint8")
-
-    st.subheader("Noisy Image")
-    st.image(noisy_img, use_container_width=True, caption="Image with Gaussian noise")
-
-    # Denoise using selected model
-    denoised_img = denoise_func(noisy_img, model)
-
-    st.subheader("Denoised Image")
-    st.image(
-        denoised_img,
-        use_container_width=True,
-        caption=f"Image after denoising by {model_choice}",
+if image_source == "Sample Image":
+    sample_dir = "sample_images"
+    image_names = sorted(
+        [
+            f
+            for f in os.listdir(sample_dir)
+            if f.lower().endswith((".png", ".jpg", ".jpeg"))
+        ]
     )
+    if not image_names:
+        st.warning("No sample images found in the directory.")
+        st.stop()
+    selected_image_name = st.selectbox("Choose a sample image:", image_names)
+    image_path = os.path.join(sample_dir, selected_image_name)
+    image = Image.open(image_path)
+elif image_source == "Upload Image":
+    uploaded_file = st.file_uploader("Upload your image:", type=["jpg", "jpeg", "png"])
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+    else:
+        st.warning("Please upload an image to proceed.")
+        st.stop()
 
-    # Side-by-side comparison
-    comparison = np.hstack((img, noisy_img, denoised_img))
-    st.subheader("Side-by-Side Comparison")
-    st.image(
-        comparison, caption="Original | Noisy | Denoised", use_container_width=True
-    )
+# --- Image Preprocessing ---
+if "REDNet30" not in model_choice:
+    image = image.convert("L")
+img = np.array(image)
+if "REDNet30" in model_choice:
+    img = crop_image_to_multiple_of(img, 32)
 
-    # Display PSNR and SSIM
-    st.subheader(
-        f"PSNR: {peak_signal_noise_ratio(img, denoised_img, data_range=255.0)}"
-    )
-    st.subheader(
-        f"SSIM: {structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1):.4f}"
-    )
+st.subheader("Original Image")
+st.image(img, use_container_width=True, caption="Grayscale input image")
+
+# --- Add Gaussian Noise ---
+noise = np.random.randn(*img.shape) * sigma
+noisy_img = img + noise
+noisy_img = np.clip(noisy_img, 0, 255).astype("uint8")
+
+st.subheader("Noisy Image")
+st.image(noisy_img, use_container_width=True, caption="Image with Gaussian noise")
+
+# --- Denoise ---
+denoised_img = denoise_func(noisy_img, model)
+
+st.subheader("Denoised Image")
+st.image(
+    denoised_img,
+    use_container_width=True,
+    caption=f"Image after denoising by {model_choice}",
+)
+
+# --- Side-by-side comparison ---
+comparison = np.hstack((img, noisy_img, denoised_img))
+st.subheader("Side-by-Side Comparison")
+st.image(comparison, caption="Original | Noisy | Denoised", use_container_width=True)
+
+# --- Metrics ---
+st.subheader(
+    f"PSNR: {peak_signal_noise_ratio(img, denoised_img, data_range=255.0):.2f}"
+)
+st.subheader(
+    f"SSIM: {structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1):.4f}"
+)
+
