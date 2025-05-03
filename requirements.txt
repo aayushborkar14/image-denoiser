@@ -48,9 +48,9 @@ sympy==1.13.3
 tenacity==9.1.2
 tifffile==2025.3.30
 toml==0.10.2
-torch==2.7.0+cpu
-torchaudio==2.7.0+cpu
-torchvision==0.22.0+cpu
+torch==2.7.0
+torchaudio==2.7.0
+torchvision==0.22.0
 tornado==6.4.2
 tqdm==4.67.1
 typing_extensions==4.12.2
