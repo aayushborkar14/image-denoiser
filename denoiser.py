@@ -84,21 +84,8 @@ st.sidebar.title("⚙️ Settings")
 # --- Model selection ---
 model_choice = st.sidebar.selectbox(
     "Choose a model:",
-    ["DnCNN", "REDNet30", "REDNet30 CBAM", "REDNet30 CBAM2"],
+    ["DnCNN", "REDNet30", "REDNet30 CBAM", "REDNet30 CBAM2", "Compare REDNet Models"],
 )
-
-if model_choice == "DnCNN":
-    model = load_dncnn()
-    denoise_func = denoise_image_dncnn
-elif model_choice == "REDNet30":
-    model = load_rednet()
-    denoise_func = denoise_image_rednet
-elif model_choice == "REDNet30 CBAM":
-    model = load_rednet_bam()
-    denoise_func = denoise_image_rednet_bam
-elif model_choice == "REDNet30 CBAM2":
-    model = load_rednet_bam2()
-    denoise_func = denoise_image_rednet_bam2
 
 # --- Image selection ---
 st.sidebar.subheader("📷 Image Input")
@@ -132,10 +119,10 @@ elif image_source == "Upload Image":
         st.stop()
 
 # --- Image Preprocessing ---
-if "REDNet30" not in model_choice:
+if "REDNet" not in model_choice:
     image = image.convert("L")
 img = np.array(image)
-if "REDNet30" in model_choice:
+if "REDNet" in model_choice:
     img = crop_image_to_multiple_of(img, 32)
 
 st.subheader("🖼️ Original Image")
@@ -149,26 +136,77 @@ noisy_img = np.clip(noisy_img, 0, 255).astype("uint8")
 st.subheader("🌩️ Noisy Image")
 st.image(noisy_img, use_container_width=True, caption="Image with Gaussian noise")
 
-# --- Denoise ---
-denoised_img = denoise_func(noisy_img, model)
+# --- Denoising ---
+if model_choice != "Compare REDNet Models":
+    if model_choice == "DnCNN":
+        model = load_dncnn()
+        denoise_func = denoise_image_dncnn
+    elif model_choice == "REDNet30":
+        model = load_rednet()
+        denoise_func = denoise_image_rednet
+    elif model_choice == "REDNet30 CBAM":
+        model = load_rednet_bam()
+        denoise_func = denoise_image_rednet_bam
+    elif model_choice == "REDNet30 CBAM2":
+        model = load_rednet_bam2()
+        denoise_func = denoise_image_rednet_bam2
 
-st.subheader("🧽 Denoised Image")
-st.image(
-    denoised_img,
-    use_container_width=True,
-    caption=f"Image after denoising by {model_choice}",
-)
+    denoised_img = denoise_func(noisy_img, model)
 
-# --- Side-by-side comparison ---
-comparison = np.hstack((img, noisy_img, denoised_img))
-st.subheader("🆚 Side-by-Side Comparison")
-st.image(comparison, caption="Original | Noisy | Denoised", use_container_width=True)
+    st.subheader("🧽 Denoised Image")
+    st.image(
+        denoised_img,
+        use_container_width=True,
+        caption=f"Image after denoising by {model_choice}",
+    )
 
-# --- Metrics ---
-psnr = peak_signal_noise_ratio(img, denoised_img, data_range=255.0)
-ssim = structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1)
+    comparison = np.hstack((img, noisy_img, denoised_img))
+    st.subheader("🆚 Side-by-Side Comparison")
+    st.image(
+        comparison, caption="Original | Noisy | Denoised", use_container_width=True
+    )
 
-st.subheader("📈 Evaluation Metrics")
-st.markdown(f"- **PSNR**: `{psnr:.2f}` dB")
-st.markdown(f"- **SSIM**: `{ssim:.4f}`")
+    psnr = peak_signal_noise_ratio(img, denoised_img, data_range=255.0)
+    ssim = structural_similarity(img, denoised_img, data_range=255.0, channel_axis=-1)
+
+    st.subheader("📈 Evaluation Metrics")
+    st.markdown(f"- **PSNR**: `{psnr:.2f}` dB")
+    st.markdown(f"- **SSIM**: `{ssim:.4f}`")
+
+else:
+    st.subheader("🧪 Running all REDNet variants...")
+
+    models = {
+        "REDNet30": (load_rednet_bam2(), denoise_image_rednet_bam2),
+        "REDNet30 CBAM": (load_rednet_bam(), denoise_image_rednet_bam),
+        "REDNet30 CBAM2": (load_rednet(), denoise_image_rednet),
+    }
+
+    denoised_results = {}
+    psnr_results = {}
+    ssim_results = {}
+
+    for name, (model, func) in models.items():
+        denoised = func(noisy_img, model)
+        psnr = peak_signal_noise_ratio(img, denoised, data_range=255.0)
+        ssim = structural_similarity(img, denoised, data_range=255.0, channel_axis=-1)
+        denoised_results[name] = denoised
+        psnr_results[name] = psnr
+        ssim_results[name] = ssim
+
+    col1, col2, col3 = st.columns(3)
+    for idx, name in enumerate(models.keys()):
+        with [col1, col2, col3][idx]:
+            st.image(denoised_results[name], use_container_width=True, caption=name)
+            st.markdown(f"**PSNR**: `{psnr_results[name]:.2f}` dB")
+            st.markdown(f"**SSIM**: `{ssim_results[name]:.4f}`")
+
+    st.subheader("📊 All Models Side-by-Side")
+    all_denoised_stack = np.hstack([denoised_results[name] for name in models.keys()])
+    comparison_all = np.hstack((img, noisy_img, all_denoised_stack))
+    st.image(
+        comparison_all,
+        caption="Original | Noisy | REDNet30 | CBAM | CBAM2",
+        use_container_width=True,
+    )
 
